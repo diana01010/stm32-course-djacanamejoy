@@ -17,22 +17,103 @@
  */
 
 #include <stdint.h>
+#include <stm32f4xx.h>
 
-#if !defined(__SOFT_FP__) && defined(__ARM_FP)
-  #warning "FPU is not initialized, but the project is compiling for an FPU. Please initialize the FPU before use."
-#endif
+
+/*variables*/
+volatile uint8_t aumentar_Counter = 0;
+uint16_t counter= 0;
+
+/*cabeceras */
+void init_gpio (void);
+void init_timers (void);
+void init_exti (void);
+
+
 
 int main(void)
 {
+	/*cargamos las configuraciones  de los elementos que vamos a utilizar */
+	init_gpio();
+	init_timers();
+	init_exti();
+
     /* Loop forever */
-	for(;;);
+	while (1){
+		if (aumentar_Counter==1){
+			counter = counter + 10;
+			aumentar_Counter = 0;
+
+		}
+	}
+	return 0;
+}
+void init_gpio(void){
+	/*Encendemos la señal de reloj para los puertos A, B, C, D, Y H */
+	//RCC->AHB1ENR |= RCC_AHB1ENR_GPIOAEN;
+	//RCC->AHB1ENR |= RCC_AHB1ENR_GPIOBEN;
+	RCC->AHB1ENR |= RCC_AHB1ENR_GPIOCEN;
+	//RCC->AHB1ENR |= RCC_AHB1ENR_GPIODEN;
+	RCC->AHB1ENR |= RCC_AHB1ENR_GPIOHEN;
+
+	/*Configurando pin del LED_OK (H1) */
+	GPIOH->MODER |=GPIO_MODER_MODE1_0;
+	GPIOH->OTYPER &= ~(GPIO_OTYPER_OT1);
+	GPIOH->OSPEEDR &= ~(GPIO_OSPEEDR_OSPEED1);
+	GPIOH->OSPEEDR |= ~ GPIO_OSPEEDR_OSPEED1_1 ;
+
+	/*Configuramos el pin C1 como entrada simple sin pull-up o pull-down*/
+	GPIOC->MODER &= ~GPIO_MODER_MODE1;
+	GPIOC->PUPDR &= ~GPIO_PUPDR_PUPD1;
+
 }
 
-///Configuracion del TIM3
+/*Configurando los EXTI  */
+void init_exti(void){
+	/*Encendiendo la señal de reloj para el SYSCFG (EXIT) */
+	RCC->APB2ENR |= RCC_APB2ENR_SYSCFGEN;
+	/*Configuramos elcanal del EXTI */
+
+	SYSCFG->EXTICR[0] &= ~(SYSCFG_EXTICR1_EXTI1);
+	/*Configurando el canal 1 del exti  para el puerto C (pin C1)*/
+	SYSCFG->EXTICR[0] |= (SYSCFG_EXTICR1_EXTI1_PC);
 
 
-////TIM3->CNT=0;
-//BAJAMOS LA BANDERA DE INTERRUPCIONB DEL TIM3
-//TIM3 SR&=~(
-///LIMPIAMOS LA POSICION  DEL UIE DEL REGISTRO
-/////LA BORRAMOS
+	/*Seleccionamos flanco de subida  para ser detectado en el PIN C1*/
+	EXTI->RTSR |= EXTI_RTSR_TR1;
+
+	/*Registrando en el NVIC la interrupcion  EXTI1 para que sea atendida;*/
+	NVIC_EnableIRQ(EXTI1_IRQn);
+
+	/*Bajamos la bandera de interrupcion*/
+	EXTI->PR |= EXTI_PR_PR1;
+	/*Activamos la interrupcion*/
+	EXTI->IMR |=EXTI_IMR_IM1;
+
+}
+/*Inicializamos todos los timers del sistemas */
+void init_timers(void){
+
+/*ISR del TIM3 */
+void TIM3_IRQHandler(void){
+
+}
+	/*Verificamos que se ha dado la interrupcion por update-event del TIM3 */
+	if (TIM3->SR && TIM_SR_UIF){
+		/*Limpiamos la bandera debido al update-event */
+		TIM3->SR &= ~(TIM_SR_UIF);
+		GPIOH->ODR ^= GPIO_ODR_OD1;
+	}
+}
+/*ISR para el EXTI con flanco de subida */
+void EXTI1_IRQHandler(void){
+	/*verificamos que se dio la interrupcion del PIN C1 */
+	if (EXTI->PR && EXTI_PR_PR1){
+		/*Bajamos la bandera de interrupcion */
+		EXTI->PR |=EXTI_PR_PR1;
+		aumentar_Counter=1;
+	}
+}
+
+
+
